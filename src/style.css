@@ -1,0 +1,170 @@
+/* Catppuccin, monospace, terminal — the same language as payitforwardlicense.com.
+   One stylesheet, copied verbatim by the build. No preprocessor, no framework. */
+
+:root {
+  --bg: #1e1e2e;
+  --fg: #c6d0f5;
+  --muted: #7f849c;
+  --rule: #2a2a3c;
+  --h1: #18e3d0;
+  --h2: #07b0f9;
+  --link: #baa7f2;
+  --accent: #f2cdcd;
+  --mono: 'Roboto Mono', 'Source Code Pro', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #eff1f5;
+    --fg: #4c4f69;
+    --muted: #8c8fa1;
+    --rule: #dce0e8;
+    --h1: #179299;
+    --h2: #1e66f5;
+    --link: #8839ef;
+    --accent: #dd7878;
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { font-size: 16px; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: 14px;
+  line-height: 1.5rem;
+  -webkit-font-smoothing: antialiased;
+  overflow-wrap: break-word;
+}
+
+main {
+  max-width: 62ch;
+  margin: 0 auto;
+  padding: 12vh 24px 18vh;
+}
+
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+a:focus-visible { outline: 1px solid var(--link); outline-offset: 3px; }
+
+/* ── header ─────────────────────────────────────────────────────────────── */
+
+header { margin-bottom: 3rem; }
+
+h1 {
+  margin: 0;
+  color: var(--h1);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.bio { margin: 0.25rem 0 0; color: var(--muted); }
+
+h2 {
+  margin: 0 0 1.25rem;
+  color: var(--h2);
+  font-size: 14px;
+  font-weight: 400;
+}
+/* The prompt marker is the whole idea of the aesthetic. */
+h2::before { content: '> '; color: var(--muted); }
+
+/* ── repo list ──────────────────────────────────────────────────────────── */
+
+.repos { list-style: none; margin: 0; padding: 0; }
+
+.repo {
+  display: flex;
+  gap: 1rem;
+  padding: 0.85rem 0;
+  border-top: 1px solid var(--rule);
+}
+.repo:last-child { border-bottom: 1px solid var(--rule); }
+
+/* Zero-padded index, like the ordered lists on payitforwardlicense.com. */
+.n {
+  flex: none;
+  color: var(--muted);
+  user-select: none;
+}
+
+.body { flex: 1; min-width: 0; }
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.name {
+  color: var(--accent);
+  font-weight: 700;
+}
+.repo:hover .name { color: var(--h1); }
+
+.spacer { flex: 1 1 auto; }
+
+.tag {
+  color: var(--muted);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 0 0.35rem;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.lang, .stars {
+  flex: none;
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+/* GitHub's own language colour, carried through from the API. */
+.lang i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 0.4rem;
+  vertical-align: baseline;
+}
+
+.desc { margin: 0.15rem 0 0; color: var(--fg); }
+
+.home {
+  display: inline-block;
+  margin-top: 0.15rem;
+  color: var(--muted);
+  font-size: 13px;
+}
+.home::before { content: '↗ '; }
+.home:hover { color: var(--link); }
+
+/* ── footer ─────────────────────────────────────────────────────────────── */
+
+footer {
+  margin-top: 3rem;
+  color: var(--muted);
+  font-size: 13px;
+}
+.sep { margin: 0 0.5rem; }
+
+@media (max-width: 520px) {
+  main { padding: 8vh 18px 12vh; }
+  .repo { gap: 0.75rem; }
+  .head { gap: 0.45rem; }
+  .spacer { display: none; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .name { transition: color 0.15s ease; }
+}

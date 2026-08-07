@@ -1,0 +1,173 @@
+// spacedevin.github.io — the index page.
+//
+// Written in Tish (https://tishlang.com) and run by the Tish runtime, not compiled to JS: the build
+// needs both `fetch` and a filesystem, and `tish:fs` is only available under `tish run`. Hence
+// `tish run --feature full src/build.tish`.
+//
+// The repo list is fetched at BUILD TIME from GitHub's GraphQL API and baked into static HTML, so
+// the page ships as one file with no client-side JavaScript and nothing to rate-limit. Re-pin a repo
+// on your GitHub profile and the next build picks it up — there is no list to edit here.
+
+import { writeFile, mkdir, readFile } from "tish:fs"
+
+let USER = "spacedevin"
+let OUT = "dist"
+
+// ── data ──────────────────────────────────────────────────────────────────────
+
+let QUERY = "query($login:String!){user(login:$login){name login bio " +
+  "pinnedItems(first:12,types:REPOSITORY){nodes{... on Repository{" +
+  "name description url homepageUrl stargazerCount isArchived " +
+  "primaryLanguage{name color}}}}}}"
+
+async fn fetchPinned() {
+  // GitHub's GraphQL API requires a token even for public data. Actions supplies GITHUB_TOKEN; for a
+  // local build, pass one in (`GITHUB_TOKEN=$(gh auth token) npm run build`).
+  let token = process.env.GITHUB_TOKEN
+  if (!token) {
+    throw new Error("GITHUB_TOKEN is required — GitHub's GraphQL API rejects anonymous requests.\n" +
+      "  local: GITHUB_TOKEN=$(gh auth token) npm run build")
+  }
+  let res = await fetch("https://api.github.com/graphql", {
+    method: "POST",
+    headers: {
+      // GitHub rejects requests without one.
+      "User-Agent": USER + ".github.io build",
+      "Authorization": "bearer " + token,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ query: QUERY, variables: { login: USER } })
+  })
+  if (!res.ok) {
+    throw new Error("GitHub API " + res.status + " " + res.statusText)
+  }
+  let body = await res.json()
+  if (body.errors) {
+    throw new Error("GraphQL: " + JSON.stringify(body.errors))
+  }
+  return body.data.user
+}
+
+// ── html ──────────────────────────────────────────────────────────────────────
+
+fn esc(s) {
+  // `null` only — the Tish runtime has no `undefined` binding at all (referencing it is an
+  // "Undefined variable" error), and a missing property reads as null.
+  if (s === null) {
+    return ""
+  }
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+}
+
+/// `https://tishlang.com/` → `tishlang.com`. The scheme is noise in a list this dense.
+fn prettyUrl(u) {
+  return String(u).replace(/^https?:\/\//, "").replace(/\/$/, "")
+}
+
+fn pad(n) {
+  let s = String(n)
+  while (s.length < 3) {
+    s = "0" + s
+  }
+  return s
+}
+
+fn repoRow(repo, index) {
+  let lang = repo.primaryLanguage
+  let out = []
+  out.push("<li class=\"repo\">")
+  out.push("<span class=\"n\">" + pad(index + 1) + "</span>")
+  out.push("<div class=\"body\">")
+
+  out.push("<div class=\"head\">")
+  out.push("<a class=\"name\" href=\"" + esc(repo.url) + "\">" + esc(repo.name) + "</a>")
+  if (repo.isArchived) {
+    out.push("<span class=\"tag\">archived</span>")
+  }
+  out.push("<span class=\"spacer\"></span>")
+  if (lang) {
+    // The dot colour is GitHub's own language colour, carried through from the API.
+    out.push("<span class=\"lang\"><i style=\"background:" + esc(lang.color) + "\"></i>" + esc(lang.name) + "</span>")
+  }
+  if (repo.stargazerCount > 0) {
+    out.push("<span class=\"stars\">&#9733; " + repo.stargazerCount + "</span>")
+  }
+  out.push("</div>")
+
+  if (repo.description) {
+    out.push("<p class=\"desc\">" + esc(repo.description) + "</p>")
+  }
+  if (repo.homepageUrl) {
+    out.push("<a class=\"home\" href=\"" + esc(repo.homepageUrl) + "\">" + esc(prettyUrl(repo.homepageUrl)) + "</a>")
+  }
+
+  out.push("</div>")
+  out.push("</li>")
+  return out.join("")
+}
+
+fn page(user, repos) {
+  let rows = []
+  let i = 0
+  while (i < repos.length) {
+    rows.push(repoRow(repos[i], i))
+    i = i + 1
+  }
+
+  let name = user.name ? user.name : user.login
+  let bio = user.bio ? user.bio : ""
+
+  return "<!doctype html>\n" +
+    "<html lang=\"en\">\n" +
+    "<head>\n" +
+    "<meta charset=\"utf-8\">\n" +
+    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n" +
+    "<title>" + esc(name) + "</title>\n" +
+    "<meta name=\"description\" content=\"" + esc(bio) + " — projects by " + esc(user.login) + ".\">\n" +
+    "<meta property=\"og:title\" content=\"" + esc(name) + "\">\n" +
+    "<meta property=\"og:description\" content=\"" + esc(bio) + "\">\n" +
+    "<meta name=\"color-scheme\" content=\"dark light\">\n" +
+    "<link rel=\"stylesheet\" href=\"style.css\">\n" +
+    "<link rel=\"icon\" href=\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='13' font-size='14'%3E%E2%97%86%3C/text%3E%3C/svg%3E\">\n" +
+    "</head>\n" +
+    "<body>\n" +
+    "<main>\n" +
+    "<header>\n" +
+    "<h1>" + esc(name) + "</h1>\n" +
+    "<p class=\"bio\">" + esc(bio) + "</p>\n" +
+    "</header>\n" +
+    "<h2>projects</h2>\n" +
+    "<ol class=\"repos\">\n" + rows.join("\n") + "\n</ol>\n" +
+    "<footer>\n" +
+    "<a href=\"https://github.com/" + esc(user.login) + "\">github.com/" + esc(user.login) + "</a>\n" +
+    "<span class=\"sep\">·</span>\n" +
+    "<span>built with <a href=\"https://tishlang.com\">tish</a></span>\n" +
+    "</footer>\n" +
+    "</main>\n" +
+    "</body>\n" +
+    "</html>\n"
+}
+
+// ── build ─────────────────────────────────────────────────────────────────────
+
+let user = await fetchPinned()
+let repos = user.pinnedItems.nodes
+
+mkdir(OUT)
+writeFile(OUT + "/index.html", page(user, repos))
+writeFile(OUT + "/style.css", readFile("src/style.css"))
+
+// GitHub Pages otherwise runs Jekyll over the artifact, which eats files starting with an underscore.
+writeFile(OUT + "/.nojekyll", "")
+
+console.log("built " + OUT + "/index.html — " + repos.length + " pinned repos")
+let i = 0
+while (i < repos.length) {
+  let r = repos[i]
+  console.log("  " + pad(i + 1) + "  " + r.name + (r.primaryLanguage ? "  [" + r.primaryLanguage.name + "]" : ""))
+  i = i + 1
+}

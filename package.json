@@ -1,0 +1,23 @@
+{
+  "name": "spacedevin.github.io",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "spacedevin.github.io — a static index of pinned projects, generated in Tish",
+  "license": "PIF",
+  "author": "spacedevin",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/spacedevin/spacedevin.github.io.git"
+  },
+  "scripts": {
+    "build": "tish run --feature full src/build.tish",
+    "serve": "npm run build && npx --yes serve dist"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@tishlang/tish": "^3.2.2"
+  }
+}

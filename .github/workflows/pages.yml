@@ -1,0 +1,69 @@
+# Build the index and deploy it to GitHub Pages.
+#
+# Also runs on a schedule: the repo list is baked in at build time, so re-pinning a repo on the
+# GitHub profile changes nothing until something rebuilds. A weekly run keeps the page honest without
+# needing a push.
+#
+# One-time setup: Settings > Pages > Build and deployment > Source = "GitHub Actions".
+
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Mondays, 08:00 UTC — picks up re-pinned repos, renames and star counts.
+    - cron: "0 8 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Install tish
+        run: npm install
+
+      # GitHub's GraphQL API rejects anonymous requests even for public data, so the build needs a
+      # token. The default GITHUB_TOKEN is enough — it only reads public profile data.
+      - name: Build
+        run: npm run build
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
