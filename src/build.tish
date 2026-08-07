@@ -154,6 +154,19 @@ fn prettyUrl(u) {
   return String(u).replace(/^https?:\/\//, "").replace(/\/$/, "")
 }
 
+/**
+ * GitHub stores a homepage exactly as it was typed, and it is not always absolute — lattish's is the
+ * bare `lattish.com`. Dropped into an href that is a RELATIVE link, so it resolved to
+ * spacedevin.github.io/lattish.com and 404'd. Display is prettified; the href has to stay absolute.
+ */
+fn absUrl(u) {
+  let s = String(u).trim()
+  if (/^https?:\/\//.test(s)) {
+    return s
+  }
+  return "https://" + s
+}
+
 fn pad(n) {
   let s = String(n)
   while (s.length < 3) {
@@ -231,7 +244,7 @@ fn repoRow(repo, index) {
     out.push("<p class=\"desc\">" + esc(repo.description) + "</p>")
   }
   if (repo.homepageUrl) {
-    out.push("<a class=\"home\" href=\"" + esc(repo.homepageUrl) + "\">" + esc(prettyUrl(repo.homepageUrl)) + "</a>")
+    out.push("<a class=\"home\" href=\"" + esc(absUrl(repo.homepageUrl)) + "\">" + esc(prettyUrl(repo.homepageUrl)) + "</a>")
   }
 
   out.push("</div>")
