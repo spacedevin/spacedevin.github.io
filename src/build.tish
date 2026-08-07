@@ -4,31 +4,43 @@
 // needs both `fetch` and a filesystem, and `tish:fs` is only available under `tish run`. Hence
 // `tish run --feature full src/build.tish`.
 //
-// The repo list is fetched at BUILD TIME from GitHub's GraphQL API and baked into static HTML, so
-// the page ships as one file with no client-side JavaScript and nothing to rate-limit. Re-pin a repo
-// on your GitHub profile and the next build picks it up — there is no list to edit here.
+// The list comes from the PROFILE README (github.com/spacedevin/spacedevin), not from pinned repos:
+// GitHub caps pins at six, and the profile page has no limit and keeps its own order. The README is
+// the one place the list is edited; a push there dispatches a rebuild here.
+//
+// Only selection and order are manual. Descriptions, homepages and languages are read from the repos
+// themselves at build time, so they stay current without anyone editing this list — unless a line
+// carries an explicit description override.
+//
+// Everything is baked into static HTML: the page ships as one file with no client-side JavaScript
+// and nothing to rate-limit.
 
 import { writeFile, mkdir, readFile } from "tish:fs"
 
 let USER = "spacedevin"
 let OUT = "dist"
+// The profile repo — `owner/owner` is GitHub's convention for the profile README.
+let PROFILE_REPO = "spacedevin"
 
 // ── data ──────────────────────────────────────────────────────────────────────
 
-// The tree lookups are for language detection — see `language()`.
-let QUERY = "query($login:String!){user(login:$login){name login bio " +
-  "pinnedItems(first:12,types:REPOSITORY){nodes{... on Repository{" +
-  "name description url homepageUrl isArchived " +
+let PROFILE_QUERY = "query($login:String!,$repo:String!){user(login:$login){name login bio} " +
+  "repository(owner:$login,name:$repo){object(expression:\"HEAD:README.md\"){... on Blob{text}}}}"
+
+// One line per repo: `- [label](https://github.com/owner/repo)` with an optional `— description`.
+let LINE = /^\s*-\s*\[([^\]]+)\]\(https:\/\/github\.com\/([^\/\)]+)\/([^\/\)\s#]+)\/?\)\s*(?:[—–-]\s*(.*))?$/
+
+// Per-repo fields. The tree lookups are for language detection — see `language()`.
+let REPO_FIELDS = "nameWithOwner name description url homepageUrl isArchived " +
   "primaryLanguage{name color} " +
   "root: object(expression:\"HEAD:\"){... on Tree{entries{name}}} " +
   "src: object(expression:\"HEAD:src\"){... on Tree{entries{name}}} " +
-  "pkgs: object(expression:\"HEAD:packages\"){... on Tree{entries{name}}}" +
-  "}}}}}"
+  "pkgs: object(expression:\"HEAD:packages\"){... on Tree{entries{name}}}"
 
 // tishlang.com's own accent (`--theme-accent` in its globals.css).
 let TISH_COLOR = "oklch(0.72 0.18 5)"
 
-async fn fetchPinned() {
+async fn graphql(query, variables) {
   // GitHub's GraphQL API requires a token even for public data. Actions supplies GITHUB_TOKEN; for a
   // local build, pass one in (`GITHUB_TOKEN=$(gh auth token) npm run build`).
   let token = process.env.GITHUB_TOKEN
@@ -44,16 +56,82 @@ async fn fetchPinned() {
       "Authorization": "bearer " + token,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ query: QUERY, variables: { login: USER } })
+    body: JSON.stringify({ query: query, variables: variables })
   })
   if (!res.ok) {
     throw new Error("GitHub API " + res.status + " " + res.statusText)
   }
   let body = await res.json()
-  if (body.errors) {
+  // GraphQL reports a missing repo as an error AND still returns data with that alias null. Only a
+  // total failure should stop the build — otherwise one bad line in the list takes the site down,
+  // and `fetchRepos` can never reach the code that skips it.
+  if (!body.data) {
     throw new Error("GraphQL: " + JSON.stringify(body.errors))
   }
-  return body.data.user
+  return body.data
+}
+
+/// Pull `owner/repo` (and any description override) out of the profile README, in order.
+fn parseList(markdown) {
+  let out = []
+  // Drop HTML comments first: the README documents its own format inside one, and those example
+  // lines are otherwise indistinguishable from real entries.
+  let lines = markdown.replace(/<!--[\s\S]*?-->/g, "").split("\n")
+  let i = 0
+  while (i < lines.length) {
+    let m = LINE.exec(lines[i])
+    if (m) {
+      out.push({ label: m[1], owner: m[2], repo: m[3], description: m[4] ? m[4].trim() : null })
+    }
+    i = i + 1
+  }
+  return out
+}
+
+/**
+ * One aliased query for every listed repo, so the whole page costs two requests regardless of how
+ * long the list grows. Aliases are positional (`r0`, `r1`, …) because a repo name is not a legal
+ * GraphQL alias — `juke.sh` and `hypery-sdk` both have characters an alias can't carry.
+ */
+async fn fetchRepos(entries) {
+  if (entries.length === 0) {
+    return []
+  }
+  let parts = []
+  let vars = {}
+  let i = 0
+  while (i < entries.length) {
+    parts.push("r" + i + ": repository(owner:$o" + i + ",name:$n" + i + "){" + REPO_FIELDS + "}")
+    vars["o" + i] = entries[i].owner
+    vars["n" + i] = entries[i].repo
+    i = i + 1
+  }
+  let decls = []
+  let d = 0
+  while (d < entries.length) {
+    decls.push("$o" + d + ":String!,$n" + d + ":String!")
+    d = d + 1
+  }
+  let data = await graphql("query(" + decls.join(",") + "){" + parts.join(" ") + "}", vars)
+
+  let repos = []
+  let k = 0
+  while (k < entries.length) {
+    let r = data["r" + k]
+    if (!r) {
+      // A typo or a repo that went private shouldn't take the whole build down — say so and skip.
+      console.log("  ! skipping " + entries[k].owner + "/" + entries[k].repo + " — not found or not visible")
+    } else {
+      // A description written in the README wins; otherwise the repo's own, so it stays current.
+      if (entries[k].description) {
+        r.description = entries[k].description
+      }
+      r.label = entries[k].label
+      repos.push(r)
+    }
+    k = k + 1
+  }
+  return repos
 }
 
 // ── html ──────────────────────────────────────────────────────────────────────
@@ -134,7 +212,7 @@ fn repoRow(repo, index) {
   out.push("<div class=\"body\">")
 
   out.push("<div class=\"head\">")
-  out.push("<a class=\"name\" href=\"" + esc(repo.url) + "\">" + esc(repo.name) + "</a>")
+  out.push("<a class=\"name\" href=\"" + esc(repo.url) + "\">" + esc(repo.label ? repo.label : repo.name) + "</a>")
   if (repo.isArchived) {
     out.push("<span class=\"tag\">archived</span>")
   }
@@ -205,8 +283,17 @@ fn page(user, repos) {
 
 // ── build ─────────────────────────────────────────────────────────────────────
 
-let user = await fetchPinned()
-let repos = user.pinnedItems.nodes
+let profile = await graphql(PROFILE_QUERY, { login: USER, repo: PROFILE_REPO })
+let readme = profile.repository ? profile.repository.object : null
+if (!readme) {
+  throw new Error("no README.md in " + USER + "/" + PROFILE_REPO + " — that file is the project list")
+}
+let entries = parseList(readme.text)
+if (entries.length === 0) {
+  throw new Error("no `- [label](https://github.com/owner/repo)` lines found in the profile README")
+}
+let user = profile.user
+let repos = await fetchRepos(entries)
 
 mkdir(OUT)
 writeFile(OUT + "/index.html", page(user, repos))
@@ -215,12 +302,12 @@ writeFile(OUT + "/style.css", readFile("src/style.css"))
 // GitHub Pages otherwise runs Jekyll over the artifact, which eats files starting with an underscore.
 writeFile(OUT + "/.nojekyll", "")
 
-console.log("built " + OUT + "/index.html — " + repos.length + " pinned repos")
+console.log("built " + OUT + "/index.html — " + repos.length + " repos from " + USER + "/" + PROFILE_REPO + "/README.md")
 let i = 0
 while (i < repos.length) {
   let r = repos[i]
   let l = language(r)
-  console.log("  " + pad(i + 1) + "  " + r.name + (l ? "  [" + l.name + "]" : "") +
+  console.log("  " + pad(i + 1) + "  " + (r.label ? r.label : r.name) + (l ? "  [" + l.name + "]" : "") +
     (l && r.primaryLanguage && l.name !== r.primaryLanguage.name ? "  (github says " + r.primaryLanguage.name + ")" : ""))
   i = i + 1
 }

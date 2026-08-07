@@ -13,14 +13,22 @@ GITHUB_TOKEN=$(gh auth token) npm run build   # -> dist/
 npm run serve                                 # build + preview
 ```
 
-## How the list stays current
+## Where the list comes from
 
-The repo list is **not in this repo**. `build.tish` queries GitHub's GraphQL API for the profile's
-pinned repositories and bakes the result into static HTML — so the page ships as one file with no
-client-side JavaScript, nothing to rate-limit, and no list to keep in sync by hand.
+**[github.com/spacedevin/spacedevin](https://github.com/spacedevin/spacedevin)** — the profile
+README. GitHub caps pinned repos at six; that list has no cap and keeps its own order. `build.tish`
+parses its `- [label](https://github.com/owner/repo)` lines and bakes the result into static HTML, so
+the page ships as one file with no client-side JavaScript and nothing to rate-limit.
 
-Re-pin a repo on the GitHub profile and the next build picks it up. Deploys run on push and weekly,
-so a re-pin lands without a commit.
+**Only selection and order are manual.** Descriptions, homepages and languages are read from the
+repos themselves at build time, so the list doesn't go stale — unless a line adds `— an override`,
+which wins.
+
+Editing that README dispatches a rebuild here (`repository_dispatch: profile-updated`). Deploys also
+run weekly, which is what picks up a description edited in one of the listed repos.
+
+A line pointing at a repo that is missing or private is skipped with a warning rather than failing
+the build.
 
 A token is required even though the data is public: GitHub's GraphQL API rejects anonymous requests.
 CI uses the default `GITHUB_TOKEN`.

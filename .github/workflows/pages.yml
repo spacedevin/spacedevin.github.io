@@ -11,8 +11,12 @@ name: Pages
 on:
   push:
     branches: [main]
+  # Sent by spacedevin/spacedevin when its README — the project list — is edited.
+  repository_dispatch:
+    types: [profile-updated]
   schedule:
-    # Mondays, 08:00 UTC — picks up re-pinned repos, renames and star counts.
+    # Mondays, 08:00 UTC. Descriptions, homepages and languages are read from the repos at build
+    # time, so this picks up changes made in those repos without anyone touching the list.
     - cron: "0 8 * * 1"
   workflow_dispatch:
 
