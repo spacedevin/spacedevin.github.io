@@ -140,9 +140,12 @@ fn repoRow(repo, index) {
   }
   out.push("<span class=\"spacer\"></span>")
   if (lang) {
+    // Dot AFTER the label: the row is right-aligned, so a leading dot sits at a different x on every
+    // row (the labels differ in length). Trailing, the dots line up on the right edge.
+    //
     // GitHub's own language colour, carried through from the API — except Tish, which has no
     // Linguist entry to carry a colour from, so it uses tishlang.com's accent.
-    out.push("<span class=\"lang\"><i style=\"background:" + esc(lang.color) + "\"></i>" + esc(lang.name) + "</span>")
+    out.push("<span class=\"lang\">" + esc(lang.name) + "<i style=\"background:" + esc(lang.color) + "\"></i></span>")
   }
   out.push("</div>")
 
