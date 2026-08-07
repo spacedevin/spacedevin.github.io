@@ -15,10 +15,18 @@ let OUT = "dist"
 
 // ── data ──────────────────────────────────────────────────────────────────────
 
+// The tree lookups are for language detection — see `language()`.
 let QUERY = "query($login:String!){user(login:$login){name login bio " +
   "pinnedItems(first:12,types:REPOSITORY){nodes{... on Repository{" +
   "name description url homepageUrl isArchived " +
-  "primaryLanguage{name color}}}}}}"
+  "primaryLanguage{name color} " +
+  "root: object(expression:\"HEAD:\"){... on Tree{entries{name}}} " +
+  "src: object(expression:\"HEAD:src\"){... on Tree{entries{name}}} " +
+  "pkgs: object(expression:\"HEAD:packages\"){... on Tree{entries{name}}}" +
+  "}}}}}"
+
+// tishlang.com's own accent (`--theme-accent` in its globals.css).
+let TISH_COLOR = "oklch(0.72 0.18 5)"
 
 async fn fetchPinned() {
   // GitHub's GraphQL API requires a token even for public data. Actions supplies GITHUB_TOKEN; for a
@@ -76,8 +84,50 @@ fn pad(n) {
   return s
 }
 
+fn countTish(tree) {
+  if (!tree) {
+    return 0
+  }
+  let entries = tree.entries
+  if (!entries) {
+    return 0
+  }
+  let n = 0
+  let i = 0
+  while (i < entries.length) {
+    if (entries[i].name.endsWith(".tish")) {
+      n = n + 1
+    }
+    i = i + 1
+  }
+  return n
+}
+
+/**
+ * GitHub reports the language via Linguist, which has no `.tish` support — so a repo written in Tish
+ * is labelled by whatever incidental JS or TS it also contains. `deck` reads as JavaScript off its
+ * build output; `lattish`, a Tish framework, reads as JavaScript too.
+ *
+ * Rather than hard-code a list of names that goes stale, detect it: a repo whose SOURCE directories
+ * hold `.tish` files is a Tish repo. Source dirs specifically, not the root — `tishlang/tish` is the
+ * compiler, written in Rust, and happens to keep one `.tish` example at its root. A root-heavy
+ * layout still qualifies at 3+, which is how `deckard` is caught.
+ *
+ * Delete all of this when Linguist learns the extension. It is not close yet: the bar is 2000
+ * indexed files excluding the language owner, and third-party usage sits near 500.
+ */
+fn language(repo) {
+  let src = countTish(repo.src)
+  let pkgs = countTish(repo.pkgs)
+  let root = countTish(repo.root)
+  if (src > 0 || pkgs > 0 || root >= 3) {
+    return { name: "Tish", color: TISH_COLOR }
+  }
+  return repo.primaryLanguage
+}
+
 fn repoRow(repo, index) {
-  let lang = repo.primaryLanguage
+  let lang = language(repo)
   let out = []
   out.push("<li class=\"repo\">")
   out.push("<span class=\"n\">" + pad(index + 1) + "</span>")
@@ -90,7 +140,8 @@ fn repoRow(repo, index) {
   }
   out.push("<span class=\"spacer\"></span>")
   if (lang) {
-    // The dot colour is GitHub's own language colour, carried through from the API.
+    // GitHub's own language colour, carried through from the API — except Tish, which has no
+    // Linguist entry to carry a colour from, so it uses tishlang.com's accent.
     out.push("<span class=\"lang\"><i style=\"background:" + esc(lang.color) + "\"></i>" + esc(lang.name) + "</span>")
   }
   out.push("</div>")
@@ -165,6 +216,8 @@ console.log("built " + OUT + "/index.html — " + repos.length + " pinned repos"
 let i = 0
 while (i < repos.length) {
   let r = repos[i]
-  console.log("  " + pad(i + 1) + "  " + r.name + (r.primaryLanguage ? "  [" + r.primaryLanguage.name + "]" : ""))
+  let l = language(r)
+  console.log("  " + pad(i + 1) + "  " + r.name + (l ? "  [" + l.name + "]" : "") +
+    (l && r.primaryLanguage && l.name !== r.primaryLanguage.name ? "  (github says " + r.primaryLanguage.name + ")" : ""))
   i = i + 1
 }
