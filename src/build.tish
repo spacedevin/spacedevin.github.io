@@ -17,7 +17,7 @@ let OUT = "dist"
 
 let QUERY = "query($login:String!){user(login:$login){name login bio " +
   "pinnedItems(first:12,types:REPOSITORY){nodes{... on Repository{" +
-  "name description url homepageUrl stargazerCount isArchived " +
+  "name description url homepageUrl isArchived " +
   "primaryLanguage{name color}}}}}}"
 
 async fn fetchPinned() {
@@ -92,9 +92,6 @@ fn repoRow(repo, index) {
   if (lang) {
     // The dot colour is GitHub's own language colour, carried through from the API.
     out.push("<span class=\"lang\"><i style=\"background:" + esc(lang.color) + "\"></i>" + esc(lang.name) + "</span>")
-  }
-  if (repo.stargazerCount > 0) {
-    out.push("<span class=\"stars\">&#9733; " + repo.stargazerCount + "</span>")
   }
   out.push("</div>")
 

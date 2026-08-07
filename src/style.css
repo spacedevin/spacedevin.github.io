@@ -121,7 +121,7 @@ h2::before { content: '> '; color: var(--muted); }
   letter-spacing: 0.08em;
 }
 
-.lang, .stars {
+.lang {
   flex: none;
   color: var(--muted);
   font-size: 13px;
